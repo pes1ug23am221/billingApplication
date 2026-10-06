@@ -1,0 +1,31 @@
+{% extends 'base.html' %}
+
+{% block title %}Register — GroceryBill{% endblock %}
+
+{% block content %}
+<div class="auth-card">
+  <h1 class="auth-title">🛒 GroceryBill</h1>
+  <p class="auth-sub">Create your account</p>
+  <p class="auth-hint">Invited by <strong>{{ invite.created_by.username }}</strong></p>
+
+  <form method="POST" novalidate>
+    {% csrf_token %}
+
+    {% if form.non_field_errors %}
+    <div class="form-error">{{ form.non_field_errors }}</div>
+    {% endif %}
+
+    {% for field in form %}
+    <div class="form-group">
+      <label for="{{ field.id_for_label }}">{{ field.label }}</label>
+      {{ field }}
+      {% if field.errors %}
+      <span class="field-error">{{ field.errors.0 }}</span>
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    <button type="submit" class="btn btn--primary btn--full">Create Account</button>
+  </form>
+</div>
+{% endblock %}

@@ -1,0 +1,134 @@
+{% extends 'base.html' %}
+
+{% block title %}Store Dashboard — GroceryBill{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>🏪 Store Dashboard</h2>
+    <span class="sub-head">
+      Central Shop Ledger &middot; Cashier: <strong>{{ user.first_name|default:user.username }}</strong>
+      <span class="live-indicator" title="Dashboard automatically stays in sync with all cashiers">🟢 Live Sync</span>
+    </span>
+  </div>
+  <div class="header-actions">
+    <a href="{% url 'billing:new_bill' %}" class="btn btn--primary">+ Snap New Bill</a>
+    <a href="{% url 'billing:history' %}" class="btn">View Past Bills</a>
+  </div>
+</div>
+
+<!-- Synchronized Central Store Financial Metrics -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <span class="stat-label">Today's Sales</span>
+    <span class="stat-value">₹{{ today_sales }}</span>
+    <span class="stat-sub">Central store sales today</span>
+  </div>
+
+  <div class="stat-card">
+    <span class="stat-label">This Month</span>
+    <span class="stat-value">₹{{ this_month_sales }}</span>
+    <span class="stat-sub">Calendar month total</span>
+  </div>
+
+  <div class="stat-card">
+    <span class="stat-label">All-Time Revenue</span>
+    <span class="stat-value">₹{{ total_sales }}</span>
+    <span class="stat-sub">{{ confirmed_count }} confirmed bill{{ confirmed_count|pluralize }}</span>
+  </div>
+
+  <div class="stat-card">
+    <span class="stat-label">Active Team</span>
+    <span class="stat-value">{{ active_cashiers_count }}</span>
+    <span class="stat-sub">Registered cashiers</span>
+  </div>
+</div>
+
+<!-- Synchronized Pending Bills Queue (Scanned at any phone/counter) -->
+{% if pending_count > 0 %}
+<div class="card card--alert">
+  <div class="alert-header">
+    <h3>⏳ Action Needed: {{ pending_count }} Bill{{ pending_count|pluralize }} in Queue</h3>
+    <span class="badge badge--review">{{ pending_count }} Pending Review</span>
+  </div>
+  <p class="card-sub">Scanned at cashier counters and awaiting review & confirmation:</p>
+
+  <div class="bill-list" style="margin-top: 1rem;">
+    {% for txn in pending_bills %}
+    <div class="bill-card bill-card--pending">
+      <div class="bill-card__header">
+        <span class="bill-card__id">Bill #{{ txn.pk }}</span>
+        <span class="badge badge--review">In Review</span>
+      </div>
+
+      <div class="bill-card__meta">
+        <span>📅 {{ txn.created_at|date:"g:i A" }}</span>
+        <span>👤 Cashier: <strong>{{ txn.user.get_full_name|default:txn.user.username }}</strong></span>
+        <span>📦 {{ txn.items.count }} item{{ txn.items.count|pluralize }}</span>
+      </div>
+
+      <div class="bill-card__total">₹{{ txn.total_amount }}</div>
+
+      <div class="bill-card__actions">
+        <a href="{% url 'billing:review' txn.pk %}" class="btn btn--sm btn--primary">Review &amp; Edit</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Top Selling Groceries Across The Store -->
+<div class="card">
+  <div class="card-header-flex">
+    <h3>🛒 Top Selling Groceries</h3>
+    <span class="card-sub">Store-wide sales rank</span>
+  </div>
+
+  {% if top_products %}
+  <div class="table-wrapper">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Product</th>
+          <th>Total Qty Sold</th>
+          <th>Total Revenue</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for item in top_products %}
+        <tr>
+          <td><strong>{{ item.product_name }}</strong></td>
+          <td>{{ item.total_qty }}</td>
+          <td><strong class="text-primary">₹{{ item.total_spend }}</strong></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty-state-sm">No confirmed bills in the store database yet. Billed groceries will show up here.</p>
+  {% endif %}
+</div>
+
+<!-- Quick Navigation Card -->
+<div class="card card--navigation">
+  <div class="nav-shortcuts">
+    <div>
+      <h4>Central Shop Archive</h4>
+      <p class="card-sub">Filter all past store bills by cashier, date, or product name.</p>
+    </div>
+    <a href="{% url 'billing:history' %}" class="btn btn--primary">Open Past Bills Archive →</a>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<!-- Gentle live auto-refresh every 30 seconds to keep multi-cashier dashboards synchronized -->
+<script>
+  setTimeout(function() {
+    window.location.reload();
+  }, 30000);
+</script>
+{% endblock %}

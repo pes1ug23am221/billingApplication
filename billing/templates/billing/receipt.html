@@ -1,0 +1,160 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Receipt #{{ txn.pk }} — GroceryBill{% endblock %}
+
+{% block content %}
+<!-- Top Action Bar for Cashier -->
+<div class="receipt-actions no-print">
+  <a href="{% url 'billing:history' %}" class="btn btn--secondary">← Past Bills</a>
+  <div class="receipt-btn-group">
+    <button onclick="window.print()" class="btn btn--primary">🖨 Print / PDF</button>
+    <button id="native-share-btn" class="btn btn--secondary" style="display:none;">📤 Share</button>
+  </div>
+</div>
+
+<!-- Customer Digital Distribution Box -->
+<div class="card distribution-card no-print">
+  <div class="distribution-header">
+    <h3>📱 Send Digital Receipt to Customer</h3>
+    <span class="card-sub">Instant zero-paper WhatsApp delivery</span>
+  </div>
+
+  <div class="distribution-inputs">
+    <div class="form-group" style="flex:1; margin-bottom:0;">
+      <input type="tel" id="wa-phone-input" class="form-input"
+             placeholder="Customer WhatsApp (e.g. 9876543210)"
+             value="{{ txn.customer_phone }}">
+    </div>
+    <a href="{{ customer_wa_link }}" target="_blank" id="wa-send-btn" class="btn btn--whatsapp">
+      Open WhatsApp 💬
+    </a>
+    <button type="button" id="copy-link-btn" class="btn btn--secondary">
+      Copy Link 📋
+    </button>
+  </div>
+  <p id="copy-status" class="copy-status" style="display:none;">✅ Receipt link copied to clipboard!</p>
+</div>
+
+<!-- Authentic POS Receipt Paper -->
+<div class="receipt-paper" id="receipt-area">
+  <div class="receipt-header">
+    <h2 class="receipt-brand">🛒 {{ store_name }}</h2>
+    <div class="receipt-meta">Bill #{{ txn.pk }} &middot; Cashier: {{ txn.user.get_full_name|default:txn.user.username }}</div>
+    <div class="receipt-date">{{ txn.confirmed_at|default:txn.created_at|date:"d M Y, g:i A" }}</div>
+    {% if txn.customer_phone %}
+    <div class="receipt-customer">Customer: {{ txn.customer_phone }}</div>
+    {% endif %}
+  </div>
+
+  <div class="receipt-divider">--------------------------------</div>
+
+  <table class="receipt-table">
+    <thead>
+      <tr>
+        <th class="text-left">ITEM</th>
+        <th class="text-center">QTY</th>
+        <th class="text-right">PRICE</th>
+        <th class="text-right">TOTAL</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for item in txn.items.all %}
+      <tr>
+        <td class="text-left">{{ item.product_name }}</td>
+        <td class="text-center">{{ item.quantity }}</td>
+        <td class="text-right">₹{{ item.unit_price }}</td>
+        <td class="text-right">₹{{ item.total_price }}</td>
+      </tr>
+      {% empty %}
+      <tr>
+        <td colspan="4" class="text-center">No items</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <div class="receipt-divider">--------------------------------</div>
+
+  <div class="receipt-totals">
+    <div class="receipt-total-row">
+      <span>Total Items:</span>
+      <span>{{ txn.items.count }}</span>
+    </div>
+    <div class="receipt-total-row">
+      <span>Payment Method:</span>
+      <strong>{{ txn.get_payment_method_display|upper }}</strong>
+    </div>
+    <div class="receipt-total-row receipt-grand-total">
+      <span>TOTAL PAID:</span>
+      <span>₹{{ txn.total_amount }}</span>
+    </div>
+  </div>
+
+  {% if txn.notes %}
+  <div class="receipt-notes">
+    <div class="receipt-divider">--------------------------------</div>
+    <p><strong>Note:</strong> {{ txn.notes }}</p>
+  </div>
+  {% endif %}
+
+  <div class="receipt-footer">
+    <div class="receipt-divider">--------------------------------</div>
+    <p>Thank you for shopping with us! 🙏</p>
+    <p class="receipt-status">Status: {{ txn.get_status_display|upper }}</p>
+    <div class="receipt-barcode">||| | ||||| ||| |||| || |||</div>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // ── WhatsApp direct link dynamic update ──
+  const phoneInput = document.getElementById('wa-phone-input');
+  const waBtn      = document.getElementById('wa-send-btn');
+  const encodedMsg = "{{ whatsapp_encoded|escapejs }}";
+
+  function updateWhatsAppUrl() {
+    let phone = phoneInput ? phoneInput.value.replace(/\D/g, '') : '';
+    if (phone.length === 10) {
+      phone = '91' + phone;
+    }
+    if (phone) {
+      waBtn.href = 'https://api.whatsapp.com/send?phone=' + phone + '&text=' + encodedMsg;
+    } else {
+      waBtn.href = 'https://api.whatsapp.com/send?text=' + encodedMsg;
+    }
+  }
+
+  if (phoneInput && waBtn) {
+    phoneInput.addEventListener('input', updateWhatsAppUrl);
+    updateWhatsAppUrl();
+  }
+
+  // ── Copy link button ──
+  const copyBtn = document.getElementById('copy-link-btn');
+  const copyStatus = document.getElementById('copy-status');
+  if (copyBtn && copyStatus) {
+    copyBtn.addEventListener('click', function() {
+      navigator.clipboard.writeText("{{ receipt_url }}").then(function() {
+        copyStatus.style.display = 'block';
+        setTimeout(() => { copyStatus.style.display = 'none'; }, 3000);
+      });
+    });
+  }
+
+  // ── Native Mobile Share API ──
+  const nativeShareBtn = document.getElementById('native-share-btn');
+  if (navigator.share && nativeShareBtn) {
+    nativeShareBtn.style.display = 'inline-flex';
+    nativeShareBtn.addEventListener('click', function() {
+      navigator.share({
+        title: "Grocery Receipt #{{ txn.pk }}",
+        text: "{{ whatsapp_msg|escapejs }}",
+        url: "{{ receipt_url }}",
+      }).catch(err => console.log('Share canceled or failed', err));
+    });
+  }
+</script>
+{% endblock %}

@@ -1,0 +1,123 @@
+{% extends 'base.html' %}
+
+{% block title %}Shop Archive — GroceryBill{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>📜 Central Store Archive</h2>
+    <span class="sub-head">Synchronized ledger across all cashiers and counters</span>
+  </div>
+  <a href="{% url 'billing:new_bill' %}" class="btn btn--primary">+ New Bill</a>
+</div>
+
+<!-- Search & Filter Bar -->
+<div class="card filter-card">
+  <form method="GET" class="filter-form">
+    <div class="filter-row">
+      <div class="filter-group filter-group--search">
+        <input type="text" name="q" value="{{ current_q }}"
+               class="form-input" placeholder="Search bill #, product name, or note…">
+      </div>
+
+      <div class="filter-group">
+        <select name="status" class="form-input">
+          <option value="">All Statuses</option>
+          <option value="confirmed" {% if current_status == 'confirmed' %}selected{% endif %}>Confirmed</option>
+          <option value="review" {% if current_status == 'review' %}selected{% endif %}>In Review</option>
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <select name="cashier" class="form-input">
+          <option value="">All Cashiers</option>
+          {% for c in available_cashiers %}
+          <option value="{{ c.username }}" {% if current_cashier == c.username %}selected{% endif %}>
+            👤 {{ c.get_full_name|default:c.username }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="filter-group">
+        <select name="date_filter" class="form-input">
+          <option value="">All Time</option>
+          <option value="today" {% if current_date_filter == 'today' %}selected{% endif %}>Today</option>
+          <option value="this_week" {% if current_date_filter == 'this_week' %}selected{% endif %}>This Week</option>
+          <option value="this_month" {% if current_date_filter == 'this_month' %}selected{% endif %}>This Month</option>
+        </select>
+      </div>
+
+      <div class="filter-actions">
+        <button type="submit" class="btn btn--primary">Filter</button>
+        {% if current_q or current_status or current_cashier or current_date_filter %}
+        <a href="{% url 'billing:history' %}" class="btn btn--secondary">Clear</a>
+        {% endif %}
+      </div>
+    </div>
+  </form>
+</div>
+
+<!-- Results Overview -->
+<div class="filter-summary">
+  <span>Found <strong>{{ filtered_count }}</strong> bill{{ filtered_count|pluralize }}</span>
+  <span>Total Confirmed Revenue: <strong class="text-primary">₹{{ filtered_total }}</strong></span>
+</div>
+
+<!-- Bills List -->
+{% if transactions %}
+<div class="bill-list">
+  {% for txn in transactions %}
+  <div class="bill-card">
+    <div class="bill-card__header">
+      <div class="bill-title-group">
+        <span class="bill-card__id">Bill #{{ txn.pk }}</span>
+        <span class="bill-cashier-tag">👤 Cashier: <strong>{{ txn.user.get_full_name|default:txn.user.username }}</strong></span>
+      </div>
+      <span class="badge {% if txn.status == 'confirmed' %}badge--confirmed{% else %}badge--review{% endif %}">
+        {{ txn.get_status_display }}
+      </span>
+    </div>
+
+    <div class="bill-card__meta">
+      <span>📅 {{ txn.created_at|date:"d M Y, g:i A" }}</span>
+      <span>📦 {{ txn.items.count }} item{{ txn.items.count|pluralize }}</span>
+      {% if txn.notes %}
+      <span class="bill-card__notes" title="{{ txn.notes }}">📝 {{ txn.notes|truncatechars:35 }}</span>
+      {% endif %}
+    </div>
+
+    <div class="bill-card__total">₹{{ txn.total_amount }}</div>
+
+    <div class="bill-card__actions">
+      {% if txn.status == 'review' %}
+      <a href="{% url 'billing:review' txn.pk %}" class="btn btn--sm btn--primary">Review &amp; Edit</a>
+      {% else %}
+      <a href="{% url 'billing:review' txn.pk %}" class="btn btn--sm">View Details</a>
+      <a href="{% url 'billing:receipt' txn.pk %}" class="btn btn--sm btn--secondary" target="_blank">Print Receipt 🖨</a>
+      {% endif %}
+
+      {% if user.is_staff or user == txn.user %}
+      <form method="POST" action="{% url 'billing:delete' txn.pk %}" style="display:inline;"
+            onsubmit="return confirm('Delete Bill #{{ txn.pk }} from the store database?');">
+        {% csrf_token %}
+        <button type="submit" class="btn btn--sm btn--danger">Delete</button>
+      </form>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% else %}
+<div class="card empty-state">
+  <p>No bills found matching your filter criteria.</p>
+  {% if current_q or current_status or current_cashier or current_date_filter %}
+  <a href="{% url 'billing:history' %}" class="btn btn--secondary">Clear Filters</a>
+  {% else %}
+  <a href="{% url 'billing:new_bill' %}" class="btn btn--primary">+ Create Your First Bill</a>
+  {% endif %}
+</div>
+{% endif %}
+
+{% endblock %}

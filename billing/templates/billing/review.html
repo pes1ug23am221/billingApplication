@@ -1,0 +1,207 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block title %}Review Bill #{{ txn.pk }} — GroceryBill{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h2>Review Bill #{{ txn.pk }}</h2>
+    <span class="sub-head"><a href="{% url 'billing:history' %}" style="text-decoration:none;">← Back to Past Bills</a></span>
+  </div>
+  {% if txn.status == 'confirmed' %}
+  <a href="{% url 'billing:receipt' txn.pk %}" class="btn btn--secondary" target="_blank">Print Receipt 🖨</a>
+  {% endif %}
+</div>
+
+<!-- Vision service remarks -->
+{% if txn.remarks %}
+<div class="alert alert--warning">
+  <strong>⚠ Note from analysis:</strong> {{ txn.remarks }}
+</div>
+{% endif %}
+
+<!-- Uploaded photos -->
+{% if txn.images.all %}
+<div class="card card--sm">
+  <p class="card-label">Uploaded photos</p>
+  <div class="preview-grid">
+    {% for img in txn.images.all %}
+    <img src="{{ img.image.url }}" alt="Grocery photo" class="preview-thumb">
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Bill editor form -->
+<form method="POST" id="review-form">
+  {% csrf_token %}
+
+  <div class="card">
+    <div class="table-wrapper">
+      <table class="table bill-table" id="items-table">
+        <thead>
+          <tr>
+            <th>Product</th>
+            <th>Qty</th>
+            <th>Unit Price (₹)</th>
+            <th>Total (₹)</th>
+            <th>Note</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="items-body">
+          {% for item in txn.items.all %}
+          <tr class="item-row">
+            <td>
+              <input type="text" name="product_name" value="{{ item.product_name }}"
+                     class="form-input form-input--sm" required
+                     {% if txn.status == 'confirmed' %}readonly{% endif %}>
+            </td>
+            <td>
+              <input type="number" name="quantity" value="{{ item.quantity }}"
+                     class="form-input form-input--sm qty-input"
+                     min="0.01" step="0.01" required
+                     {% if txn.status == 'confirmed' %}readonly{% endif %}>
+            </td>
+            <td>
+              <input type="number" name="unit_price" value="{{ item.unit_price }}"
+                     class="form-input form-input--sm price-input"
+                     min="0" step="0.01" required
+                     {% if txn.status == 'confirmed' %}readonly{% endif %}>
+            </td>
+            <td class="row-total">₹{{ item.total_price }}</td>
+            <td>
+              {% if item.remark %}
+              <span class="badge badge--warn" title="{{ item.remark }}">⚠ check</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if txn.status == 'review' %}
+              <button type="button" class="btn btn--sm btn--danger remove-row">✕</button>
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr>
+            <td colspan="3" class="total-label">Grand Total</td>
+            <td colspan="3" class="total-amount" id="grand-total">₹{{ txn.total_amount }}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+
+    {% if txn.status == 'review' %}
+    <button type="button" class="btn btn--sm" id="add-row-btn">+ Add Item</button>
+    {% endif %}
+
+    <div class="form-group" style="margin-top:1rem;">
+      <label for="notes">Bill Notes (optional)</label>
+      <textarea name="notes" id="notes" class="form-input"
+                rows="2" placeholder="Customer name, counter tag, etc…"
+                {% if txn.status == 'confirmed' %}readonly{% endif %}>{{ txn.notes }}</textarea>
+    </div>
+
+    {% if txn.status == 'review' %}
+    <!-- ── Payment & Customer Checkout Section ──────────────── -->
+    <div class="payment-section">
+      <h3 class="section-title">💳 Payment &amp; Customer Settlement</h3>
+
+      <!-- Customer WhatsApp / Mobile -->
+      <div class="form-group">
+        <label for="customer_phone_input">Customer Mobile / WhatsApp (optional)</label>
+        <input type="tel" id="customer_phone_input" name="customer_phone"
+               class="form-input" placeholder="e.g. 9876543210 (for sending digital receipt)"
+               value="{{ txn.customer_phone }}">
+      </div>
+
+      <!-- Payment Method Radios -->
+      <label class="form-label-bold">Payment Method</label>
+      <div class="payment-tabs">
+        <label class="payment-tab">
+          <input type="radio" name="payment_method_choice" value="cash" checked>
+          <span>💵 Cash</span>
+        </label>
+        <label class="payment-tab">
+          <input type="radio" name="payment_method_choice" value="upi">
+          <span>📱 UPI / QR Code</span>
+        </label>
+        <label class="payment-tab">
+          <input type="radio" name="payment_method_choice" value="card">
+          <span>💳 Card</span>
+        </label>
+      </div>
+
+      <!-- Cash Tender Box -->
+      <div id="cash-panel" class="payment-panel">
+        <div class="tender-calculator">
+          <div class="form-group" style="margin-bottom:0;">
+            <label for="cash_tendered">Cash Received from Customer (₹)</label>
+            <input type="number" id="cash_tendered" class="form-input" placeholder="e.g. 500" step="1" min="0">
+          </div>
+          <div class="tender-result">
+            <span class="tender-label">Change to Return:</span>
+            <span class="tender-value" id="cash_change">₹0.00</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- UPI QR Code Box -->
+      <div id="upi-panel" class="payment-panel" style="display: none;">
+        <div class="upi-box">
+          <div class="upi-qr-wrapper">
+            <img src="{{ qr_code_b64 }}" alt="UPI QR Code" class="upi-qr-img" id="upi-qr-image">
+            <span class="upi-qr-badge">Dynamic Bill QR</span>
+          </div>
+          <div class="upi-details">
+            <div class="upi-amount-callout">
+              <span>Scan to Pay:</span>
+              <strong id="upi-pay-amount">₹{{ txn.total_amount }}</strong>
+            </div>
+            <p class="upi-vpa">VPA: <code>{{ store_upi_id }}</code></p>
+            <p class="upi-hint">Supports Google Pay, PhonePe, Paytm, BHIM</p>
+            <a href="{{ upi_uri }}" class="btn btn--sm btn--primary upi-deeplink" id="upi-deeplink">
+              Open UPI App On Phone
+            </a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card Box -->
+      <div id="card-panel" class="payment-panel" style="display: none;">
+        <div class="card-box">
+          <p>💳 Swipe or tap card on POS terminal for <strong id="card-pay-amount">₹{{ txn.total_amount }}</strong></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn btn--secondary">Save Item Changes</button>
+      <button type="button" class="btn btn--primary btn--lg" id="confirm-btn">
+        Confirm &amp; Settle Bill →
+      </button>
+    </div>
+
+    {% else %}
+    <div class="alert alert--success">
+      ✅ Confirmed on {{ txn.confirmed_at|date:"d M Y, g:i A" }} &middot; Paid via <strong>{{ txn.get_payment_method_display }}</strong>
+      {% if txn.customer_phone %}&middot; Customer: {{ txn.customer_phone }}{% endif %}
+    </div>
+    {% endif %}
+  </div>
+</form>
+
+<!-- Hidden confirm form (POST-only) -->
+<form method="POST" action="{% url 'billing:confirm' txn.pk %}" id="confirm-form">
+  {% csrf_token %}
+  <input type="hidden" name="payment_method" id="confirm_payment_method" value="cash">
+  <input type="hidden" name="customer_phone" id="confirm_customer_phone" value="">
+</form>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="{% static 'js/bill_editor.js' %}"></script>
+{% endblock %}

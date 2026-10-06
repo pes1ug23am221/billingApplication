@@ -1,0 +1,43 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}Grocery Billing{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+
+  {% if user.is_authenticated %}
+  <nav class="navbar">
+    <span class="nav-brand">🛒 GroceryBill</span>
+    <div class="nav-links">
+      <a href="{% url 'billing:dashboard' %}">Dashboard</a>
+      <a href="{% url 'billing:history' %}">Past Bills</a>
+      <a href="{% url 'billing:new_bill' %}">+ New Bill</a>
+      {% if user.is_staff %}
+      <a href="{% url 'accounts:invite' %}">Invites</a>
+      {% endif %}
+      <a href="{% url 'accounts:logout' %}" class="btn-logout">Logout</a>
+    </div>
+  </nav>
+  {% endif %}
+
+  <main class="container">
+
+    {% if messages %}
+    <div class="messages">
+      {% for message in messages %}
+      <div class="alert alert--{{ message.tags }}">{{ message }}</div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% block content %}{% endblock %}
+
+  </main>
+
+  {% block scripts %}{% endblock %}
+</body>
+</html>
